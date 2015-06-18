@@ -20,21 +20,24 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
-import java.lang.management.ThreadMXBean;
-import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Deque;
 import java.util.Iterator;
 import java.util.List;
-import java.util.TimeZone;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
+import javax.management.AttributeNotFoundException;
 import javax.management.InstanceNotFoundException;
+import javax.management.MBeanException;
 import javax.management.MBeanServer;
+import javax.management.MalformedObjectNameException;
 import javax.management.NotificationListener;
 import javax.management.ObjectName;
+import javax.management.ReflectionException;
 
 public class GCEventThread extends Thread {
 
@@ -45,12 +48,13 @@ public class GCEventThread extends Thread {
 	private boolean running = true;
 	private String path;
 	private long lastException;
-	
+	private String format;
 
-	public GCEventThread(long initialDelay, String path) {
+	public GCEventThread(long initialDelay, String path, String format) {
 		super("JHealthAgent - GC Event Thread");
 		this.initialDelay = initialDelay;
 		this.path = path;
+		this.format = format;
 
 		for (int i = 0; i < 10; i++) {
 			youngGcCounter.add(new AtomicLong(0));
@@ -60,6 +64,17 @@ public class GCEventThread extends Thread {
 
 	@Override
 	public void run() {
+
+		// touch the output file
+		if (path != null) {
+			try {
+				FileWriter fileWriter = new FileWriter(path, true);
+				fileWriter.close();
+			} catch (IOException e) {
+				logException(e);
+			}
+		}
+
 		// wait to make sure early construction of the MBean server does not
 		// interfere with other software
 		try {
@@ -90,12 +105,7 @@ public class GCEventThread extends Thread {
 			}
 		}
 
-		ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
-		TimeZone tz = TimeZone.getTimeZone("UTC");
-	    DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssX");
-	    df.setTimeZone(tz);
-		
-		
+
 		// from now on remove the last counter at the end and add a new one at the front
 		while (running) {
 			try {
@@ -105,45 +115,58 @@ public class GCEventThread extends Thread {
 
 			if (path != null) {
 				try (PrintWriter out = new PrintWriter(new BufferedWriter(new FileWriter(path, true)))) {
-					StringBuilder s = new StringBuilder();
-
-					//Time
-				    s.append(df.format(new Date()));
-
-				    // young GC
-					long young = 0;
-					Iterator<AtomicLong> iter = youngGcCounter.iterator();
-					for (int i = 0; i < 2; i++) {
-						young += iter.next().longValue();
+					Pattern pattern = Pattern.compile("\\$(.+?)\\{(.+?)\\}");
+					Matcher matcher = pattern.matcher(format);
+					StringBuffer sb = new StringBuffer();
+					while(matcher.find()) {
+						String domain = matcher.group(1);
+						String attribute = matcher.group(2);
+						String replacement = "[n/a]";
+						switch (domain) {
+						case "TIME":
+							replacement = new SimpleDateFormat(attribute).format(new Date());
+							break;
+						case "SYSPROP":
+							replacement = System.getProperty(attribute);
+							break;
+						case "jhealth:type=YoungGC":
+							replacement = getJHealthDomain(youngGcCounter,attribute);
+							break;
+						case "jhealth:type=TenuredGC":
+							replacement = getJHealthDomain(tenuredGcCounter,attribute);
+							break;
+						default:
+							// other MBean
+							Object value;
+							try {
+								value = mBeanServer.getAttribute(new ObjectName(domain), attribute);
+								replacement = value.toString();
+							} catch (AttributeNotFoundException | InstanceNotFoundException
+									| MalformedObjectNameException | MBeanException | ReflectionException e) {
+								logException(e);
+								replacement = "n/a";
+							}
+							break;
+						}
+						matcher.appendReplacement(sb,replacement);
 					}
-					s.append("|youngGcCount=" + young);
-					// tenured GC
-					long tenured = 0;
-					iter = youngGcCounter.iterator();
-					for (int i = 0; i < 2; i++) {
-						tenured += iter.next().longValue();
-					}
-					s.append("|tenuredGcCount=" + tenured);
-					
-					// Thread count
-					s.append("|threadCount=" + threadMXBean.getThreadCount() );
-					
+					matcher.appendTail(sb);
 
-					out.println(s.toString());
+					out.println(sb.toString());
 				} catch (IOException e) {
 					logException(e);
 				}
 			}
 
-//			String s = "Young ";
-//			for (Iterator<AtomicLong> iter = youngGcCounter.iterator(); iter.hasNext();) {
-//				s += "[" + iter.next().toString() + "]";
-//			}
-//			s += "\nTenured ";
-//			for (Iterator<AtomicLong> iter = tenuredGcCounter.iterator(); iter.hasNext();) {
-//				s += "[" + iter.next().toString() + "]";
-//			}
-//			System.err.println(s);
+			// String s = "Young ";
+			// for (Iterator<AtomicLong> iter = youngGcCounter.iterator(); iter.hasNext();) {
+			// s += "[" + iter.next().toString() + "]";
+			// }
+			// s += "\nTenured ";
+			// for (Iterator<AtomicLong> iter = tenuredGcCounter.iterator(); iter.hasNext();) {
+			// s += "[" + iter.next().toString() + "]";
+			// }
+			// System.err.println(s);
 
 			youngGcCounter.removeLast();
 			youngGcCounter.addFirst(new AtomicLong(0));
@@ -152,7 +175,21 @@ public class GCEventThread extends Thread {
 		}
 	}
 
-	private void logException(IOException e) {
+	private String getJHealthDomain(Deque<AtomicLong> gcCounter, String attribute) {
+		if (attribute.startsWith("count-")) {
+			int count = Integer.parseInt(attribute.substring(6));
+			long sum = 0;
+			Iterator<AtomicLong> iter = gcCounter.iterator();
+			for (int i = 0; i < count; i++) {
+				sum += iter.next().longValue();
+			}
+			return Long.toString(sum);
+		}
+		return "n/a";
+
+	}
+
+	private void logException(Exception e) {
 		long millis = System.currentTimeMillis();
 		if (millis - lastException > 1000 * 60 * 60) { // once each hour
 			lastException = millis;

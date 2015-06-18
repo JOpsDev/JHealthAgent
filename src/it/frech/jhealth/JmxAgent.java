@@ -17,9 +17,11 @@ package it.frech.jhealth;
 
 import it.frech.jhealth.gc.GCEventThread;
 
+import java.io.FileReader;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.util.LinkedList;
+import java.util.Properties;
 
 public class JmxAgent {
 	public static void premain(String agentArgs) {
@@ -28,9 +30,52 @@ public class JmxAgent {
 
 		int port = 0;
 		String path = null;
+		int delay = 5000;
+		String format = "$TIME{yyyy-MM-dd HH:mm:ss};minorGcCount=$jhealth:type=YoungGC{count-2};majorGcCount=$jhealth:type=TenuredGC{count-2};threadCount=$java.lang:type=Threading{ThreadCount}";
+		
+		String sysProp = System.getProperty(Constants.PORT_PROPERTY);
+		if (sysProp != null) {
+			port = Integer.parseInt(sysProp);
+		}
+		
+		sysProp = System.getProperty(Constants.PATH_PROPERTY);
+		if (sysProp != null) {
+			path = sysProp;
+		}
+		
 		
 		if (agentArgs != null) {
 			String[] args = agentArgs.split(",");
+			// preprocess the config file so that other javaagent-options overwrite this
+			for (String arg : args) {
+				if (arg.startsWith("config=")) {
+					String config = arg.substring(7);
+					Properties props = new Properties();
+					try {
+						props.load(new FileReader(config));
+						String p;
+						p = props.getProperty(Constants.PORT_PROPERTY);
+						if (p != null) {
+							port = Integer.parseInt(p);
+						}
+						p = props.getProperty(Constants.PATH_PROPERTY);
+						if (p != null) {
+							path = p;
+						}
+						p = props.getProperty(Constants.FORMAT_PROPERTY);
+						if (p != null) {
+							format = p;
+						}
+						p = props.getProperty(Constants.DELAY_PROPERTY);
+						if (p != null) {
+							delay = Integer.parseInt(p);
+						}
+					} catch (IOException e) {
+						e.printStackTrace(System.err);
+					}
+				}
+			}
+			
 			for (String arg : args) {
 				if (arg.startsWith("port=")) {
 					port = Integer.parseInt(arg.substring(5));
@@ -40,9 +85,18 @@ public class JmxAgent {
 					path = arg.substring(5);
 					continue;
 				}
+				if (arg.startsWith("delay=")) {
+					delay = Integer.parseInt(arg.substring(6));
+					continue;
+				}
+				if (arg.startsWith("config=")) {
+					// skip, already processed
+					continue;
+				}
 				System.err.println("JHealthAgent: Could not parse option '"+arg+"'. Ignoring it.");
 			}
 		}
+
 
 		if (port > 0) {
 			try {
@@ -74,17 +128,7 @@ public class JmxAgent {
 			}
 		}
 
-		// final LoggerThread logThread = new LoggerThread(System.out);
-		// logThread.setDaemon(true);
-		// logThread.start();
-		// shutdownTasks.add(new Runnable() {
-		// @Override
-		// public void run() {
-		// logThread.stopThread();
-		// }
-		// });
-
-		final GCEventThread gcEventThread = new GCEventThread(2000, path);
+		final GCEventThread gcEventThread = new GCEventThread(delay, path, format);
 		gcEventThread.setDaemon(true);
 		gcEventThread.start();
 
