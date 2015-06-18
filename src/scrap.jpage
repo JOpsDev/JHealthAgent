@@ -1,0 +1,8 @@
+String s = "port=1234,path=/abc/def";
+s.split(",");
+
+String s = "port=1234";
+s.split(",");
+
+
+"".split(",");

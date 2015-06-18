@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<project name="project" default="package">
+	<!-- path id="compile.path">
+		<fileset dir="lib/">
+			<include name="**/*.jar" />
+		</fileset>
+	</path -->
+
+	<target name="package" depends="agent-jar" description="create the distribution">
+		<zip destfile="dist/jhealthagent.zip" >
+			<zipfileset dir="." prefix="jhealth/">
+				<include name="jhealthagent.jar" />
+				<include name="docs/**" />
+			</zipfileset>
+		</zip>
+	</target>
+
+	<target name="agent-jar" depends="compile">
+		<jar destfile="jhealthagent.jar" basedir="bin" manifest="bin/META-INF/MANIFEST.MF" excludes="**/*Test*.class" />
+	</target>
+
+	<target name="compile">
+		<javac srcdir="src" destdir="bin" debug="on" source="1.7" target="1.7" />
+		<!-- javac srcdir="src" destdir="bin" classpathref="compile.path" debug="on" target="1.6" / -->
+		<copy todir="bin">
+			<fileset dir="src" excludes="**/*.java" />
+		</copy>
+	</target>
+
+	<target name="clean">
+		<delete includeEmptyDirs="true">
+			<fileset dir="bin/" includes="**/*" defaultexcludes="no" />
+		</delete>
+	</target>
+
+
+</project>
