@@ -27,15 +27,20 @@ class CollectorAcceptingThread extends Thread {
 	private boolean keepRunning;
 
 	ServerSocket socket;
+	
+	String [] permittedIPs;
 
 	// use a *synchronized* Map since multiple Threads may access it
 	private Map<String, Long> lastValueMap = new java.util.Hashtable<String, Long>();
 
 	private MBeanServer mbeanServer;
 
-	public CollectorAcceptingThread() {
+	public CollectorAcceptingThread(String permittedIPs) {
 		setName("Collector MBean Accept-Thread");
 		setDaemon(true);
+		if (permittedIPs != null){
+			this.permittedIPs = permittedIPs.split("&");
+		}
 	}
 
 	@Override
@@ -48,16 +53,29 @@ class CollectorAcceptingThread extends Thread {
 
 	private void acceptRequests() {
 		
+		if (permittedIPs != null){
 		
-		
-		try {
-			Socket reqSocket = socket.accept();
-			CollectorRequestHandlingThread thread = new CollectorRequestHandlingThread(reqSocket,lastValueMap, getMBeanServer());
-			thread.setName("Collector request "+reqSocket.getRemoteSocketAddress());
-			thread.setDaemon(true);
-			thread.start();
-		} catch (IOException e) {
-			// the socket could have been closed -> ok
+			try {
+				Socket reqSocket = socket.accept();
+				boolean isPermitted = false;
+				for (String ip :permittedIPs){
+					if (reqSocket.getInetAddress().getHostAddress().equals(ip)){
+						isPermitted = true;
+					}
+				}
+				if (isPermitted){
+				CollectorRequestHandlingThread thread = new CollectorRequestHandlingThread(reqSocket,lastValueMap, getMBeanServer());
+				thread.setName("Collector request "+reqSocket.getRemoteSocketAddress());
+				thread.setDaemon(true);
+				thread.start();
+				}else{
+					reqSocket.close();
+				}
+			} catch (IOException e) {
+				// the socket could have been closed -> ok
+			}catch (SecurityException e) {
+				System.out.println(e.getMessage());
+			}
 		}
 	}
 
