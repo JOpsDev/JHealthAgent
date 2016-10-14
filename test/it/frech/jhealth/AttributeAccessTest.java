@@ -46,14 +46,19 @@ public class AttributeAccessTest {
 		String attributeName = "HeapMemoryUsageDoesNotExist/used";
 		MBeanUtil.readAttribute(mbeanServer,mbeanName,attributeName);
 	}
-	@Test
+	
+	@Test(expected=IllegalArgumentException.class)
 	public void testNotCompositeType() {
 		String mbeanName = "java.lang:type=Memory";
 		String attributeName = "ObjectPendingFinalizationCount/used";
-		Object attribute = MBeanUtil.readAttribute(mbeanServer,mbeanName,attributeName);
-		assertNotNull(attribute);
-		assertFalse(attribute instanceof Number);
-		assertTrue(attribute.toString().contains("CompositeData"));
+		MBeanUtil.readAttribute(mbeanServer,mbeanName,attributeName);
+	}
+
+	@Test(expected=IllegalArgumentException.class)
+	public void testCompositeMissingKeyType() {
+		String mbeanName = "java.lang:type=Memory";
+		String attributeName = "HeapMemoryUsage/doesNotExist";
+		MBeanUtil.readAttribute(mbeanServer,mbeanName,attributeName);
 	}
 
 }

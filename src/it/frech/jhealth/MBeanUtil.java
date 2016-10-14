@@ -23,7 +23,8 @@ public class MBeanUtil {
 
 	}
 
-	public static Object readAttribute(MBeanServer mbeanServer, ObjectName objectName, String attributeName) throws IllegalArgumentException {
+	public static Object readAttribute(MBeanServer mbeanServer, ObjectName objectName, String attributeName)
+			throws IllegalArgumentException {
 		try {
 			int slashPos = attributeName.indexOf("/");
 			Object attribute;
@@ -36,8 +37,8 @@ public class MBeanUtil {
 					CompositeData data = (CompositeData) attribute;
 					attribute = data.get(attributeName.substring(slashPos + 1));
 				} else {
-					attribute = "No CompositeData found on attribute named " + prefix + ". Type is "
-							+ attribute.getClass().getName();
+					throw new IllegalArgumentException("No CompositeData found on attribute named " + prefix
+							+ ". Type is " + attribute.getClass().getName());
 				}
 			}
 			return attribute;
