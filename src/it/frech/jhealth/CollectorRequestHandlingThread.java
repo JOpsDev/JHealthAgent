@@ -97,7 +97,8 @@ public class CollectorRequestHandlingThread extends Thread {
 						out.flush();
 						return;
 					}
-					Object attribute = mbeanServer.getAttribute(objectName, attributeName);
+					
+					Object attribute = MBeanUtil.readAttribute(mbeanServer, objectName, attributeName);
 
 					if (attribute instanceof Number) {
 						long value = ((Number) attribute).longValue();

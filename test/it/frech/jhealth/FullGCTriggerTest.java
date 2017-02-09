@@ -26,7 +26,7 @@ import java.util.TreeMap;
 public class FullGCTriggerTest {
 
 	private static final double CHUNK_RATIO = .2;
-	private static final double KEEP_RATIO = .9;
+	private static final double KEEP_RATIO = .8;
 	private static final int MAX_CHUNKS = (int) (1 / CHUNK_RATIO * KEEP_RATIO);
 
 	private static Random random = new Random();

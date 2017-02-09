@@ -25,6 +25,7 @@ import java.util.Date;
 import java.util.Deque;
 import java.util.Iterator;
 import java.util.List;
+import java.util.TimeZone;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Matcher;
@@ -40,6 +41,19 @@ import javax.management.ObjectName;
 import javax.management.ReflectionException;
 
 public class GCEventThread extends Thread {
+
+	private static final String DOMAIN_START_SIGN = "$";
+
+	private static final String DOMAIN_REGEX = "\\" + DOMAIN_START_SIGN + "(.+?)\\{(.+?\\}{0,})(\\})*\\}";
+
+	private static final String DOMAIN_TIME = "TIME";
+	private static final String DOMAIN_SYSPROP = "SYSPROP";
+	private static final String DOMAIN_JHEALTH_YOUNG_GC = "jhealth:type=YoungGC";
+	private static final String DOMAIN_JHEALTH_TENURED_GC = "jhealth:type=TenuredGC";
+
+	private static final String SUB_DOMAIN_TIMEZONE = "TIMEZONE";
+
+	private static final String VALUE_NOT_AVAILABLE = "[n/a]";
 
 	private Deque<AtomicLong> youngGcCounter = new ConcurrentLinkedDeque<AtomicLong>();
 	private Deque<AtomicLong> tenuredGcCounter = new ConcurrentLinkedDeque<AtomicLong>();
@@ -115,38 +129,37 @@ public class GCEventThread extends Thread {
 
 			if (path != null) {
 				try (PrintWriter out = new PrintWriter(new BufferedWriter(new FileWriter(path, true)))) {
-					Pattern pattern = Pattern.compile("\\$(.+?)\\{(.+?)\\}");
-					Matcher matcher = pattern.matcher(format);
+				    Matcher matcher = createDomainMatcher(this.format);
 					StringBuffer sb = new StringBuffer();
 					while(matcher.find()) {
 						String domain = matcher.group(1);
 						String attribute = matcher.group(2);
-						String replacement = "[n/a]";
+						String replacement = VALUE_NOT_AVAILABLE;
 						switch (domain) {
-						case "TIME":
-							replacement = new SimpleDateFormat(attribute).format(new Date());
-							break;
-						case "SYSPROP":
-							replacement = System.getProperty(attribute);
-							break;
-						case "jhealth:type=YoungGC":
-							replacement = getJHealthDomain(youngGcCounter,attribute);
-							break;
-						case "jhealth:type=TenuredGC":
-							replacement = getJHealthDomain(tenuredGcCounter,attribute);
-							break;
-						default:
-							// other MBean
-							Object value;
-							try {
-								value = mBeanServer.getAttribute(new ObjectName(domain), attribute);
-								replacement = value.toString();
-							} catch (AttributeNotFoundException | InstanceNotFoundException
-									| MalformedObjectNameException | MBeanException | ReflectionException e) {
-								logException(e);
-								replacement = "n/a";
-							}
-							break;
+							case DOMAIN_TIME:
+								replacement = getTime(attribute);
+								break;
+							case DOMAIN_SYSPROP:
+								replacement = System.getProperty(attribute);
+								break;
+							case DOMAIN_JHEALTH_YOUNG_GC:
+								replacement = getJHealthDomain(youngGcCounter,attribute);
+								break;
+							case DOMAIN_JHEALTH_TENURED_GC:
+								replacement = getJHealthDomain(tenuredGcCounter,attribute);
+								break;
+							default:
+								// other MBean
+								Object value;
+								try {
+									value = mBeanServer.getAttribute(new ObjectName(domain), attribute);
+									replacement = value.toString();
+								} catch (AttributeNotFoundException | InstanceNotFoundException
+										| MalformedObjectNameException | MBeanException | ReflectionException e) {
+									logException(e);
+									replacement = VALUE_NOT_AVAILABLE;
+								}
+								break;
 						}
 						matcher.appendReplacement(sb,replacement);
 					}
@@ -175,6 +188,43 @@ public class GCEventThread extends Thread {
 		}
 	}
 
+	private Matcher createDomainMatcher(String searchBase){
+		Pattern pattern = Pattern.compile(DOMAIN_REGEX);
+		return pattern.matcher(searchBase);
+	}
+
+	private String getTime(String attributeForTime){
+		Matcher subDomainMatcher = createDomainMatcher(attributeForTime);
+		String formattedTime = VALUE_NOT_AVAILABLE;
+
+		try{
+			SimpleDateFormat sdf = null;
+
+			if( subDomainMatcher.find() ){
+				String subDomainName = subDomainMatcher.group(1);
+				String attribute = subDomainMatcher.group(2);
+				if( SUB_DOMAIN_TIMEZONE.equals( subDomainName )){
+				    // remove the timezone-part from the original incoming value
+				    // NOTE: we intentionally invoke trim() here so that we can use blank between value and sub-domain
+				    // for better readability
+				    // e.g. given: $TIME{dd.MM.yyyy HH:mm:ss $TIMEZONE{Europe/Berlin}}
+				    // => blank between '...:ss $TIMEZONE{...'
+					attributeForTime = subDomainMatcher.replaceFirst("").trim();
+					sdf = new SimpleDateFormat(attributeForTime);
+					sdf.setTimeZone(TimeZone.getTimeZone(attribute));
+				}
+			} else {
+			    sdf = new SimpleDateFormat(attributeForTime);
+			}
+
+			formattedTime = sdf.format(new Date());
+		} catch( Exception e ){
+			logException(e);
+		}
+
+		return formattedTime;
+	}
+
 	private String getJHealthDomain(Deque<AtomicLong> gcCounter, String attribute) {
 		if (attribute.startsWith("count-")) {
 			int count = Integer.parseInt(attribute.substring(6));
@@ -185,7 +235,7 @@ public class GCEventThread extends Thread {
 			}
 			return Long.toString(sum);
 		}
-		return "n/a";
+		return VALUE_NOT_AVAILABLE;
 
 	}
 
