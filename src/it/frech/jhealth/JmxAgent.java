@@ -20,8 +20,6 @@ import it.frech.jhealth.gc.GCEventThread;
 import java.io.FileReader;
 import java.io.IOException;
 import java.net.ServerSocket;
-import java.net.SocketPermission;
-import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.Properties;
 
