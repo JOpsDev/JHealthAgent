@@ -24,6 +24,12 @@ Because some software as well known application servers don't like it if a MBean
 
 ### Optional config file
 
+The location of the config file can be specified by the config property, e.g. like this:
+
+ -javaagent:/path/to/jhealthagent.jar=path=/tmp/health.log,config=/path/to/jhealth.conf
+ 
+The config file has a standard Java properties file format. The following is an example of the contents:
+ 
 jhealth.format=$TIME{dd.MM.yyyy HH:mm:ss};$SYSPROP{jboss.node.name};$jhealth:type=YoungGC{count-2};$jhealth:type=TenuredGC{count-2};$java.lang:type=Threading{ThreadCount}
 
 All dynamic values have the $domain{attribute} format. This can be an MBean domain and attribute. The TIME domain lets you specify the timecode according to java.text.SimpleDateFormat. jhealth:type=YoungGC and jhealth:type=TenuredGC are built into JHealthAgent up to now and will be converted to real MBeans in a later release.
@@ -34,10 +40,11 @@ The path to write the health file to.
 
 jhealth.port=5678
 
+The port to open e.g. for Nagios/Incinga integration.
 
 jhealth.delay=1000
 
-
+The inital delay before the internal GC logic starts taking the GC events into account. This helps raising alarms because the server is still in a startup phase in which it is not unusal that the Heap gets resized multiple times and GC events happen very frequently.
 
 ### Using System Properties
 If you don't want to specify either port or path in the javaagent-option you can also use System Properties, which can be passed with the -D option to the JVM.
