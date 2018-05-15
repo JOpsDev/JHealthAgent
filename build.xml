@@ -21,6 +21,7 @@
 	</target>
 
 	<target name="compile">
+		<mkdir dir="bin"/>
 		<javac srcdir="src" destdir="bin" debug="on" source="1.7" target="1.7" />
 		<!-- javac srcdir="src" destdir="bin" classpathref="compile.path" debug="on" target="1.6" / -->
 		<copy todir="bin">
