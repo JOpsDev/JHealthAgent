@@ -27,15 +27,20 @@ class CollectorAcceptingThread extends Thread {
 	private boolean keepRunning;
 
 	ServerSocket socket;
+	
+	String [] permittedIPs;
 
 	// use a *synchronized* Map since multiple Threads may access it
 	private Map<String, Long> lastValueMap = new java.util.Hashtable<String, Long>();
 
 	private MBeanServer mbeanServer;
 
-	public CollectorAcceptingThread() {
+	public CollectorAcceptingThread(String permittedIPs) {
 		setName("Collector MBean Accept-Thread");
 		setDaemon(true);
+		if (permittedIPs != null && permittedIPs.length() > 0){
+			this.permittedIPs = permittedIPs.split("&");
+		}
 	}
 
 	@Override
@@ -47,22 +52,39 @@ class CollectorAcceptingThread extends Thread {
 	}
 
 	private void acceptRequests() {
-		
-		
-		
-		try {
-			Socket reqSocket = socket.accept();
-			CollectorRequestHandlingThread thread = new CollectorRequestHandlingThread(reqSocket,lastValueMap, getMBeanServer());
-			thread.setName("Collector request "+reqSocket.getRemoteSocketAddress());
-			thread.setDaemon(true);
-			thread.start();
-		} catch (IOException e) {
-			// the socket could have been closed -> ok
-		}
+			try {
+				Socket reqSocket = socket.accept();
+				if (isPermitted(reqSocket)){
+					CollectorRequestHandlingThread thread = new CollectorRequestHandlingThread(reqSocket,lastValueMap, getMBeanServer());
+					thread.setName("Collector request "+reqSocket.getRemoteSocketAddress());
+					thread.setDaemon(true);
+					thread.start();
+				}else{
+					reqSocket.close();
+				}
+			} catch (IOException e) {
+				// the socket could have been closed -> ok
+			}catch (SecurityException e) {
+				System.out.println(e.getMessage());
+			}
 	}
 
-	
-
+	public boolean isPermitted(Socket socket) {
+		// default is allowed
+		boolean isPermitted = true;
+		String ipAddress = socket.getInetAddress().getHostAddress();
+		// If a list of IPs is defined, check if the requesting IP is in there
+		
+		if (permittedIPs != null && permittedIPs.length > 0) {
+			isPermitted = false;
+			for (String ip :permittedIPs){
+				if (ipAddress.equals(ip)){
+					isPermitted = true;
+				}
+			}
+		}
+		return isPermitted;
+	}
 	private MBeanServer getMBeanServer() {
 		if (mbeanServer == null) {
 			mbeanServer = ManagementFactory.getPlatformMBeanServer();

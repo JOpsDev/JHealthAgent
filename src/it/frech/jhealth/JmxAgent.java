@@ -32,6 +32,7 @@ public class JmxAgent {
 		String path = null;
 		int delay = 5000;
 		String format = "$TIME{yyyy-MM-dd HH:mm:ss};minorGcCount=$jhealth:type=YoungGC{count-2};majorGcCount=$jhealth:type=TenuredGC{count-2};threadCount=$java.lang:type=Threading{ThreadCount}";
+		String permittedIPs= null;
 		
 		String sysProp = System.getProperty(Constants.PORT_PROPERTY);
 		if (sysProp != null) {
@@ -43,6 +44,10 @@ public class JmxAgent {
 			path = sysProp;
 		}
 		
+		sysProp = System.getProperty(Constants.IPLIST_PROPERTY);
+		if (sysProp != null) {
+			permittedIPs = sysProp;
+		}
 		
 		if (agentArgs != null) {
 			String[] args = agentArgs.split(",");
@@ -70,6 +75,10 @@ public class JmxAgent {
 						if (p != null) {
 							delay = Integer.parseInt(p);
 						}
+						p = props.getProperty(Constants.IPLIST_PROPERTY);
+						if (p != null) {
+							permittedIPs = p;
+						}
 					} catch (IOException e) {
 						e.printStackTrace(System.err);
 					}
@@ -87,6 +96,10 @@ public class JmxAgent {
 				}
 				if (arg.startsWith("delay=")) {
 					delay = Integer.parseInt(arg.substring(6));
+					continue;
+				}
+				if (arg.startsWith("ipList=")) {
+					permittedIPs = arg.substring(7);
 					continue;
 				}
 				if (arg.startsWith("config=")) {
@@ -112,7 +125,7 @@ public class JmxAgent {
 					}
 				});
 
-				final CollectorAcceptingThread thread = new CollectorAcceptingThread();
+				final CollectorAcceptingThread thread = new CollectorAcceptingThread(permittedIPs);
 				thread.socket = serverSocket;
 				thread.start();
 

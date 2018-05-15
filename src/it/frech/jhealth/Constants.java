@@ -6,4 +6,5 @@ public class Constants {
 	public final static String PORT_PROPERTY = "jhealth.port";
 	public final static String FORMAT_PROPERTY = "jhealth.format";
 	public final static String DELAY_PROPERTY = "jhealth.delay";
+	public final static String IPLIST_PROPERTY = "jhealth.ipList";
 }
